@@ -42,32 +42,8 @@ def serialize_gemini_tools(tools: List[CanonicalToolDefinition]) -> List[types.T
 
 
 def _get_gemini_api_model_name(model: Llm) -> str:
-    if model in [
-        Llm.GEMINI_3_FLASH_PREVIEW_HIGH,
-        Llm.GEMINI_3_FLASH_PREVIEW_MINIMAL,
-    ]:
-        return "gemini-3-flash-preview"
-    if model in [
-        Llm.GEMINI_3_5_FLASH_HIGH,
-        Llm.GEMINI_3_5_FLASH_MEDIUM,
-        Llm.GEMINI_3_5_FLASH_LOW,
-        Llm.GEMINI_3_5_FLASH_MINIMAL,
-    ]:
-        return "gemini-3.5-flash"
-    if model in [
-        Llm.GEMINI_3_6_FLASH_HIGH,
-        Llm.GEMINI_3_6_FLASH_MEDIUM,
-        Llm.GEMINI_3_6_FLASH_LOW,
-        Llm.GEMINI_3_6_FLASH_MINIMAL,
-    ]:
-        return "gemini-3.6-flash"
-    if model in [
-        Llm.GEMINI_3_1_PRO_PREVIEW_HIGH,
-        Llm.GEMINI_3_1_PRO_PREVIEW_MEDIUM,
-        Llm.GEMINI_3_1_PRO_PREVIEW_LOW,
-    ]:
-        return "gemini-3.1-pro-preview"
-    return model.value
+    # All Gemini requests use the working free-tier model gemini-3.5-flash
+    return "gemini-3.5-flash"
 
 
 def _get_thinking_level_for_model(model: Llm) -> str:

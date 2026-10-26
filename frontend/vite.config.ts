@@ -16,6 +16,7 @@ export default ({ mode }) => {
       // Listen on all interfaces so sandbox preview tunnels can reach the
       // dev server (default binding is loopback-only).
       host: true,
+      allowedHosts: true,
       // Route backend traffic through the frontend origin so the app works
       // via tunnels/preview URLs (no hardcoded localhost from the browser).
       proxy: {
