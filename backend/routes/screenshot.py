@@ -42,31 +42,10 @@ def bytes_to_data_url(image_bytes: bytes, mime_type: str) -> str:
     return f"data:{mime_type};base64,{base64_image}"
 
 
-async def capture_with_playwright(target_url: str, device: str = "desktop") -> bytes:
-    from playwright.async_api import async_playwright
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-        )
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 832} if device == "desktop" else {"width": 375, "height": 812},
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        )
-        page = await context.new_page()
-        try:
-            await page.goto(target_url, wait_until="networkidle", timeout=25000)
-        except Exception:
-            pass
-        await page.wait_for_timeout(1000)
-        image_bytes = await page.screenshot(full_page=True, type="png")
-        await browser.close()
-        return image_bytes
-
-
 async def capture_screenshot(
     target_url: str, api_key: str | None = None, device: str = "desktop"
 ) -> bytes:
+    # 1. Custom ScreenshotOne API key if provided
     if api_key and api_key.strip():
         try:
             api_base_url = "https://api.screenshotone.com/take"
@@ -88,26 +67,37 @@ async def capture_screenshot(
                 if response.status_code == 200 and response.content:
                     return response.content
         except Exception as exc:
-            print(f"[SCREENSHOT] ScreenshotOne error: {exc}, using free Playwright capture")
+            print(f"[SCREENSHOT] ScreenshotOne error: {exc}")
 
+    # 2. Microlink cloud screenshot (instant, free, 0 MB server memory)
     try:
-        return await capture_with_playwright(target_url, device=device)
+        async with httpx.AsyncClient(timeout=30) as client:
+            m_resp = await client.get(
+                f"https://api.microlink.io?url={target_url}&screenshot=true&meta=false"
+            )
+            data = m_resp.json()
+            img_url = data.get("data", {}).get("screenshot", {}).get("url")
+            if img_url:
+                img_resp = await client.get(img_url, timeout=30)
+                if img_resp.status_code == 200 and img_resp.content:
+                    return img_resp.content
     except Exception as exc:
-        print(f"[SCREENSHOT] Playwright error: {exc}, trying free Microlink API fallback")
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                m_resp = await client.get(
-                    f"https://api.microlink.io?url={target_url}&screenshot=true&meta=false"
-                )
-                data = m_resp.json()
-                img_url = data.get("data", {}).get("screenshot", {}).get("url")
-                if img_url:
-                    img_resp = await client.get(img_url)
-                    if img_resp.status_code == 200 and img_resp.content:
-                        return img_resp.content
-        except Exception as e2:
-            print(f"[SCREENSHOT] Microlink fallback also failed: {e2}")
-        raise exc
+        print(f"[SCREENSHOT] Microlink error: {exc}")
+
+    # 3. thum.io cloud screenshot fallback (instant, free, 0 MB server memory)
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            thum_resp = await client.get(
+                f"https://image.thum.io/get/width/1280/{target_url}",
+                timeout=30,
+                follow_redirects=True,
+            )
+            if thum_resp.status_code == 200 and thum_resp.content:
+                return thum_resp.content
+    except Exception as exc:
+        print(f"[SCREENSHOT] thum.io error: {exc}")
+
+    raise Exception("Failed to capture website screenshot from URL")
 
 
 class ScreenshotRequest(BaseModel):
