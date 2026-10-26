@@ -43,8 +43,8 @@ def serialize_gemini_tools(tools: List[CanonicalToolDefinition]) -> List[types.T
 
 
 def _get_gemini_api_model_name(model: Llm) -> str:
-    # All Gemini requests use the working free-tier model gemini-3.5-flash
-    return "gemini-3.5-flash"
+    # Use gemini-3.5-flash-lite which has active quota and supports fast multimodal generation
+    return "gemini-3.5-flash-lite"
 
 
 def _get_thinking_level_for_model(model: Llm) -> str:
