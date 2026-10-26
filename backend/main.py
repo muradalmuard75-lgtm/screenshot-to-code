@@ -53,9 +53,14 @@ app.add_middleware(
 async def add_no_cache_headers(request, call_next):
     response = await call_next(request)
     if request.url.path == "/" or request.url.path.endswith(".html"):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        # Delete ETag and Last-Modified to prevent 304 cached responses
+        if "etag" in response.headers:
+            del response.headers["etag"]
+        if "last-modified" in response.headers:
+            del response.headers["last-modified"]
     return response
 
 # Add routes
@@ -71,9 +76,31 @@ app.include_router(eval_sets.router)
 
 # Mount frontend dist if built (enables single-service deployment on Render/cloud)
 import os
+import time
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    index_file = os.path.join(frontend_dist, "index.html")
+    if os.path.exists(index_file):
+        with open(index_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Force cache-busting on every load so any modification appears instantly
+        cache_buster = f"?v={int(time.time())}"
+        content = content.replace('.js"', f'.js{cache_buster}"').replace('.css"', f'.css{cache_buster}"')
+        return HTMLResponse(
+            content=content,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+    return HTMLResponse("<h3>Backend running</h3>")
+
 if os.path.exists(frontend_dist):
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 else:
