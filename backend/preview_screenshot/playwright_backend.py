@@ -36,7 +36,7 @@ class PlaywrightBackend:
                 # most containers/hosted Linux) unless the sandbox is disabled.
                 self._browser = await self._playwright.chromium.launch(
                     headless=True,
-                    args=["--no-sandbox"],
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
                 )
             return self._browser
 

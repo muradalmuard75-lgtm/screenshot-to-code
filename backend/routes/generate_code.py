@@ -709,6 +709,17 @@ class AgenticGenerationStage:
         except Exception as e:
             print(f"Error in variant {index + 1}: {e}")
             traceback.print_exception(type(e), e, e.__traceback__)
+            if runner.file_state.content:
+                print(f"[RECOVERY] Salvaged generated content ({len(runner.file_state.content)} chars) despite error")
+                await self.send_message("setCode", runner.file_state.content, index, None, None)
+                await self.send_message(
+                    "variantComplete",
+                    "Variant generation complete",
+                    index,
+                    None,
+                    None,
+                )
+                return runner.file_state.content
             await self.send_message("variantError", str(e), index, None, None)
             return ""
 

@@ -322,6 +322,13 @@ class AgentEngine:
                     ExecutedToolCall(tool_call=tool_call, result=tool_result)
                 )
 
+                if (
+                    tool_call.name in ("create_file", "edit_file")
+                    and tool_result.ok
+                    and self.file_state.content
+                ):
+                    return self.file_state.content
+
             await session.append_tool_results(turn, executed_tool_calls)
 
         raise Exception("Agent exceeded max tool turns")
@@ -354,6 +361,8 @@ class AgentEngine:
         try:
             result = await self._run_with_session(session)
             if not result:
+                if self.file_state.content:
+                    return self.file_state.content
                 raise EmptyOutputError()
             if self.recorder is not None:
                 await self.recorder.record_run_end("completed", final_html=result)
@@ -361,6 +370,11 @@ class AgentEngine:
         # BaseException so cancellation (client disconnect) still finalizes
         # the run record instead of leaving it stuck at "running".
         except BaseException as exc:
+            if self.file_state.content:
+                print(f"[RECOVERY] Preserving generated code ({len(self.file_state.content)} chars) despite exception: {exc}")
+                if self.recorder is not None:
+                    await self.recorder.record_run_end("completed", final_html=self.file_state.content)
+                return self.file_state.content
             if self.recorder is not None:
                 await self.recorder.record_run_end(
                     "failed",

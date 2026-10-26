@@ -34,8 +34,8 @@ def create_provider_session(
         image_editing_enabled=bool(replicate_api_key or REPLICATE_API_KEY),
         # The extract_assets tool calls Gemini, so don't offer it without a key.
         asset_extraction_enabled=should_extract_assets and bool(gemini_api_key),
-        # screenshot_preview needs headless Chromium; skip it if it can't launch.
-        screenshot_enabled=is_screenshot_preview_available(),
+        # Disable headless Chromium preview in cloud container to conserve RAM and prevent tool loop issues
+        screenshot_enabled=False,
     )
 
     if model in OPENAI_MODELS:
