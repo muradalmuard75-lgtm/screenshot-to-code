@@ -5,8 +5,6 @@ services:
     buildCommand: ./build.sh
     startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: GEMINI_API_KEY
-        sync: false
       - key: NUM_VARIANTS
         value: "1"
       - key: NUM_VARIANTS_VIDEO
