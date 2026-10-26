@@ -58,6 +58,8 @@ export function generateCode(
   const wsUrl = `${WS_BACKEND_URL}/generate-code`;
   console.log("Connecting to backend @ ", wsUrl);
 
+  let hasReceivedCodeOrComplete = false;
+
   const ws = new WebSocket(wsUrl);
   wsRef.current = ws;
 
@@ -68,12 +70,15 @@ export function generateCode(
   ws.addEventListener("message", async (event: MessageEvent) => {
     const response = JSON.parse(event.data) as WebSocketResponse;
     if (response.type === "chunk") {
+      hasReceivedCodeOrComplete = true;
       callbacks.onChange(response.value || "", response.variantIndex);
     } else if (response.type === "status") {
       callbacks.onStatusUpdate(response.value || "", response.variantIndex);
     } else if (response.type === "setCode") {
+      hasReceivedCodeOrComplete = true;
       callbacks.onSetCode(response.value || "", response.variantIndex);
     } else if (response.type === "variantComplete") {
+      hasReceivedCodeOrComplete = true;
       callbacks.onVariantComplete(response.variantIndex);
     } else if (response.type === "variantError") {
       callbacks.onVariantError(response.variantIndex, response.value || "");
@@ -91,7 +96,9 @@ export function generateCode(
       callbacks.onToolResult(response.data, response.variantIndex, response.eventId);
     } else if (response.type === "error") {
       console.error("Error generating code", response.value);
-      toast.error(response.value || ERROR_MESSAGE);
+      if (!hasReceivedCodeOrComplete) {
+        toast.error(response.value || ERROR_MESSAGE);
+      }
     }
   });
 
@@ -100,6 +107,9 @@ export function generateCode(
     if (event.code === USER_CLOSE_WEB_SOCKET_CODE) {
       toast.success(CANCEL_MESSAGE);
       callbacks.onCancel("user_cancelled");
+    } else if (hasReceivedCodeOrComplete) {
+      // If code was already generated, the task succeeded!
+      callbacks.onComplete();
     } else if (event.code === APP_ERROR_WEB_SOCKET_CODE) {
       console.error("Known server error", event);
       callbacks.onCancel("request_failed", event.reason || ERROR_MESSAGE);

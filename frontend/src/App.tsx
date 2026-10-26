@@ -539,6 +539,15 @@ function App() {
         // terminal messages, otherwise they remain stuck in "running" state.
         finishInFlightEvents(reason === "request_failed" ? "error" : "complete");
 
+        // Never kick the user out if code has already been generated or preview is ready!
+        const latestCommit = useProjectStore.getState().commits[commit.hash];
+        const hasGeneratedCode = latestCommit?.variants.some((v) => v.code && v.code.trim().length > 0);
+        if (hasGeneratedCode) {
+          console.log("Code already generated, staying on workspace preview");
+          setAppState(AppState.CODE_READY);
+          return;
+        }
+
         if (reason === "request_failed" && commit.type === "ai_create") {
           const latestCreateCommit = useProjectStore.getState().commits[commit.hash];
           latestCreateCommit?.variants.forEach((variant, variantIndex) => {

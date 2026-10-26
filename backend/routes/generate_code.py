@@ -239,7 +239,7 @@ class WebSocketCommunicator:
         """Close the WebSocket connection"""
         if not self.is_closed:
             try:
-                await self.websocket.close()
+                await self.websocket.close(code=1000)
             except (
                 ConnectionClosedOK,
                 ConnectionClosedError,
