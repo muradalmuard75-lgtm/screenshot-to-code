@@ -42,6 +42,23 @@ def bytes_to_data_url(image_bytes: bytes, mime_type: str) -> str:
     return f"data:{mime_type};base64,{base64_image}"
 
 
+def optimize_image(
+    image_bytes: bytes, max_width: int = 1280, max_height: int = 1600
+) -> tuple[bytes, str]:
+    try:
+        from PIL import Image
+        import io
+
+        img = Image.open(io.BytesIO(image_bytes))
+        img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+        out = io.BytesIO()
+        img.convert("RGB").save(out, format="JPEG", quality=85, optimize=True)
+        return out.getvalue(), "image/jpeg"
+    except Exception as exc:
+        print(f"[OPTIMIZE] Failed to resize: {exc}")
+        return image_bytes, "image/png"
+
+
 async def capture_screenshot(
     target_url: str, api_key: str | None = None, device: str = "desktop"
 ) -> bytes:
@@ -122,8 +139,11 @@ async def app_screenshot(request: ScreenshotRequest):
         # Capture screenshot with normalized URL
         image_bytes = await capture_screenshot(normalized_url, api_key=api_key)
 
+        # Optimize and resize image to prevent mobile canvas/compositor crashes
+        optimized_bytes, mime_type = optimize_image(image_bytes)
+
         # Convert the image bytes to a data url
-        data_url = bytes_to_data_url(image_bytes, "image/png")
+        data_url = bytes_to_data_url(optimized_bytes, mime_type)
 
         return ScreenshotResponse(url=data_url)
     except ValueError as e:
