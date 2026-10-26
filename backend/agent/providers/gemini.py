@@ -1,4 +1,5 @@
 # pyright: reportUnknownVariableType=false
+import asyncio
 import base64
 import copy
 import uuid
@@ -318,19 +319,41 @@ class GeminiProviderSession(ProviderSession):
                 "gemini", api_model_name, request_payload
             )
 
-        stream = await self._client.aio.models.generate_content_stream(
-            model=api_model_name,
-            contents=cast(Any, self._contents),
-            config=config,
-        )
-
         state = GeminiParseState()
         turn_usage: TokenUsage | None = None
-        async for chunk in stream:
-            await _parse_chunk(chunk, state, on_event)
-            chunk_usage = _extract_usage(chunk)
-            if chunk_usage is not None:
-                turn_usage = chunk_usage
+        models_to_attempt = [api_model_name, "gemini-3.5-flash-lite"]
+        last_exc: Exception | None = None
+        turn_done = False
+
+        for candidate_model in models_to_attempt:
+            for attempt in range(3):
+                try:
+                    stream = await self._client.aio.models.generate_content_stream(
+                        model=candidate_model,
+                        contents=cast(Any, self._contents),
+                        config=config,
+                    )
+                    state = GeminiParseState()
+                    turn_usage = None
+                    async for chunk in stream:
+                        await _parse_chunk(chunk, state, on_event)
+                        chunk_usage = _extract_usage(chunk)
+                        if chunk_usage is not None:
+                            turn_usage = chunk_usage
+                    turn_done = True
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    err_msg = str(exc)
+                    if "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg:
+                        await asyncio.sleep(2 * (attempt + 1))
+                        continue
+                    raise
+            if turn_done:
+                break
+
+        if not turn_done and last_exc is not None:
+            raise last_exc
 
         if turn_usage is not None:
             self._prompt_report_logger.record_usage(turn_usage)
