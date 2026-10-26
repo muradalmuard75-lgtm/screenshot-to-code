@@ -42,40 +42,77 @@ def bytes_to_data_url(image_bytes: bytes, mime_type: str) -> str:
     return f"data:{mime_type};base64,{base64_image}"
 
 
+async def capture_with_playwright(target_url: str, device: str = "desktop") -> bytes:
+    from playwright.async_api import async_playwright
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        )
+        context = await browser.new_context(
+            viewport={"width": 1280, "height": 832} if device == "desktop" else {"width": 375, "height": 812},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(target_url, wait_until="networkidle", timeout=25000)
+        except Exception:
+            pass
+        await page.wait_for_timeout(1000)
+        image_bytes = await page.screenshot(full_page=True, type="png")
+        await browser.close()
+        return image_bytes
+
+
 async def capture_screenshot(
-    target_url: str, api_key: str, device: str = "desktop"
+    target_url: str, api_key: str | None = None, device: str = "desktop"
 ) -> bytes:
-    api_base_url = "https://api.screenshotone.com/take"
+    if api_key and api_key.strip():
+        try:
+            api_base_url = "https://api.screenshotone.com/take"
+            params = {
+                "access_key": api_key.strip(),
+                "url": target_url,
+                "full_page": "true",
+                "device_scale_factor": "1",
+                "format": "png",
+                "block_ads": "true",
+                "block_cookie_banners": "true",
+                "block_trackers": "true",
+                "cache": "false",
+                "viewport_width": "1280" if device == "desktop" else "375",
+                "viewport_height": "832" if device == "desktop" else "812",
+            }
+            async with httpx.AsyncClient(timeout=45) as client:
+                response = await client.get(api_base_url, params=params)
+                if response.status_code == 200 and response.content:
+                    return response.content
+        except Exception as exc:
+            print(f"[SCREENSHOT] ScreenshotOne error: {exc}, using free Playwright capture")
 
-    params = {
-        "access_key": api_key,
-        "url": target_url,
-        "full_page": "true",
-        "device_scale_factor": "1",
-        "format": "png",
-        "block_ads": "true",
-        "block_cookie_banners": "true",
-        "block_trackers": "true",
-        "cache": "false",
-        "viewport_width": "342",
-        "viewport_height": "684",
-    }
-
-    if device == "desktop":
-        params["viewport_width"] = "1280"
-        params["viewport_height"] = "832"
-
-    async with httpx.AsyncClient(timeout=60) as client:
-        response = await client.get(api_base_url, params=params)
-        if response.status_code == 200 and response.content:
-            return response.content
-        else:
-            raise Exception("Error taking screenshot")
+    try:
+        return await capture_with_playwright(target_url, device=device)
+    except Exception as exc:
+        print(f"[SCREENSHOT] Playwright error: {exc}, trying free Microlink API fallback")
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                m_resp = await client.get(
+                    f"https://api.microlink.io?url={target_url}&screenshot=true&meta=false"
+                )
+                data = m_resp.json()
+                img_url = data.get("data", {}).get("screenshot", {}).get("url")
+                if img_url:
+                    img_resp = await client.get(img_url)
+                    if img_resp.status_code == 200 and img_resp.content:
+                        return img_resp.content
+        except Exception as e2:
+            print(f"[SCREENSHOT] Microlink fallback also failed: {e2}")
+        raise exc
 
 
 class ScreenshotRequest(BaseModel):
     url: str
-    apiKey: str
+    apiKey: str | None = None
 
 
 class ScreenshotResponse(BaseModel):
