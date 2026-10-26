@@ -45,6 +45,47 @@
       name="twitter:image"
       content="https://screenshottocode.com/brand/twitter-summary-card.png"
     />
+
+    <!-- Disable caching aggressively across all browsers -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <script>
+      // Automatically clean up any old service workers or cached storage
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (var r of registrations) { r.unregister(); }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var n of names) { caches.delete(n); }
+        });
+      }
+
+      // Check for live updates when the user switches tabs or stays on page
+      window.__APP_VERSION__ = "BUILD_PLACEHOLDER";
+      function checkAppVersion() {
+        fetch('/api/version?_t=' + Date.now(), { cache: 'no-store' })
+          .then(function(res) { return res.json(); })
+          .then(function(data) {
+            if (data && data.version) {
+              if (window.__SERVER_VERSION__ && data.version > window.__SERVER_VERSION__) {
+                console.log("New version detected, updating immediately...");
+                window.location.reload();
+              }
+              window.__SERVER_VERSION__ = data.version;
+            }
+          })
+          .catch(function() {});
+      }
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') checkAppVersion();
+      });
+      window.addEventListener('focus', checkAppVersion);
+      setInterval(checkAppVersion, 20000);
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -39,6 +39,13 @@ async def probe_screenshot_preview_on_startup() -> None:
 
     await probe_screenshot_preview()
 
+import os
+import time
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+DEPLOY_TIMESTAMP = int(time.time())
+
 # Configure CORS settings
 app.add_middleware(
     CORSMiddleware,
@@ -52,16 +59,27 @@ app.add_middleware(
 @app.middleware("http")
 async def add_no_cache_headers(request, call_next):
     response = await call_next(request)
-    if request.url.path == "/" or request.url.path.endswith(".html"):
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        # Delete ETag and Last-Modified to prevent 304 cached responses
-        if "etag" in response.headers:
-            del response.headers["etag"]
-        if "last-modified" in response.headers:
-            del response.headers["last-modified"]
+    # Never cache anything so any update appears instantly on mobile/desktop browsers
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, post-check=0, pre-check=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    if "etag" in response.headers:
+        del response.headers["etag"]
+    if "last-modified" in response.headers:
+        del response.headers["last-modified"]
     return response
+
+
+@app.get("/api/version")
+async def get_app_version():
+    return JSONResponse(
+        content={"version": DEPLOY_TIMESTAMP},
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 # Add routes
 app.include_router(generate_code.router)
@@ -75,11 +93,6 @@ app.include_router(agent_runs.router)
 app.include_router(eval_sets.router)
 
 # Mount frontend dist if built (enables single-service deployment on Render/cloud)
-import os
-import time
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
 
 @app.get("/", response_class=HTMLResponse)
@@ -91,12 +104,14 @@ async def serve_index():
         # Force cache-busting on every load so any modification appears instantly
         cache_buster = f"?v={int(time.time())}"
         content = content.replace('.js"', f'.js{cache_buster}"').replace('.css"', f'.css{cache_buster}"')
+        content = content.replace('BUILD_PLACEHOLDER', str(DEPLOY_TIMESTAMP))
         return HTMLResponse(
             content=content,
             headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0, post-check=0, pre-check=0",
                 "Pragma": "no-cache",
                 "Expires": "0",
+                "Clear-Site-Data": '"cache"',
             },
         )
     return HTMLResponse("<h3>Backend running</h3>")
